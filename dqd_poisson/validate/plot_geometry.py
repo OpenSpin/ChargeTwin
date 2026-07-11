@@ -26,7 +26,7 @@ _MAT_CAT = {"SiGe": 0, "Si": 1, "SiO2": 2, "screening_metal": 3, "gate_metal": 4
 _MAT_NAMES = sorted(_MAT_CAT, key=_MAT_CAT.get)
 _MAT_COLORS = ["gold", "yellowgreen", "indigo", "dimgray", "red"]
 _LAYER_CAT = {
-    "bottom_pad": "SiGe", "SiGe_lower": "SiGe", "Si_well": "Si", "SiGe_upper": "SiGe",
+    "bottom_pad": "SiGe", "SiGe_lower": "SiGe", "SiGe_barrier": "SiGe", "Si_well": "Si",
     "Si_cap": "Si", "SiO2_lower": "SiO2", "screening_slab": "SiO2", "top_branch": "SiO2",
 }
 

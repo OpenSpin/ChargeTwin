@@ -49,9 +49,13 @@ def main():
     print(f"alpha_LL(proj) = {aLL_p:+.4f} eV/V   (target -0.11)")
     print(f"alpha_LR(proj) = {aLR_p:+.4f} eV/V   (target -0.044)")
 
-    phi_op = superpose(gate_response, voltages)
-    Fz = vertical_field_well(problem, phi_op, dotL_xy)
-    print(f"|F_z| at dotL (nominal op point) = {abs(Fz):.3e} V/m  (target 5.34e6 V/m)  [sign {'down' if Fz<0 else 'up'}]")
+    # F_z,0 target (spec §3.4) is defined at the nominal operating point
+    # (spec §3.2: V_PL=V_PR=0.35 V), which differs from the Fig.1(f)
+    # lever-arm sweep point (cfg default 0.19 V) used above.
+    nominal_voltages = dict(voltages, PL=0.35, PR=0.35)
+    phi_nom = superpose(gate_response, nominal_voltages)
+    Fz = vertical_field_well(problem, phi_nom, dotL_xy)
+    print(f"|F_z| at dotL (nominal op point, V_PL=V_PR=0.35) = {abs(Fz):.3e} V/m  (target 5.34e6 V/m)  [sign {'down' if Fz<0 else 'up'}]")
 
 
 if __name__ == "__main__":

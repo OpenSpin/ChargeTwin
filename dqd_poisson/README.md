@@ -61,21 +61,38 @@ jaxlib's AVX-optimized wheel crashes under Rosetta emulation.
    layers, sitting immediately lateral to the channel (not a distant grounded
    plane as first modeled); PL/PR/barrier fingers sit only in the top 27 nm
    metal layer, directly above the upper SiO2 (they do not dip down into the
-   screening slab). With this fix, at the Fig.1(f) alpha operating point
-   (plungers 0.19 V):
-     alpha_LL = -0.13 eV/V  (target -0.11)   close -- was -0.41 before the fix
-     alpha_LR = -0.02 eV/V  (target -0.044)  now undershoots (was -0.03, also low)
-   At the nominal operating point (spec §3.2, plungers 0.35 V):
-     |F_z| = 1.28 MV/m  (target 5.34)  ~4x low
-   alpha_LL is now close to the paper. F_z is still off by about the same
-   factor as before the screening fix -- plausible cause: the extra ~30 nm of
-   oxide/screening-slab/oxide stack now between the top gate and the well
-   (vs. ~15 nm when fingers wrongly dipped down) pushes the plunger too far
-   from the dot vertically. This suggests the fingers DO reach further down
-   than "only in the top 27 nm slab" in the real device (e.g. through a via/
-   extension not visible at this cross-section), or the well sits closer to
-   the interface than modeled. Needs the actual finger vertical extent from
-   Fig.1(e) to resolve -- open item. See `validate/lever_at_dot.py`.
+   screening slab).
+
+   **z-stack bug fix:** the well was wrongly sandwiched between two SiGe
+   layers (30 nm below + 50 nm above), i.e. ~66.5 nm below the gate stack.
+   Spec §3.1's row order is substrate(30)+barrier(60) both *below* the well,
+   well directly under the Si cap -- only ~26.5 nm below the gate stack.
+   Fixed (`SiGe_lower` 30 + `SiGe_barrier` 60 below `Si_well`, no SiGe above
+   it); restored `t_oxide_lower_nm`/`t_screening_slab_nm` to the spec's 10/10
+   nm (the 5/5 values above were a since-obsolete compensating hack for the
+   wrong well position). Also applied user-confirmed values: `w_metal_nm`
+   45 nm (was 40), `plunger_pitch_nm` 95 nm to match the clean-device
+   interdot distance target `d0=95nm` (was 90).
+
+   Effect at the Fig.1(f) alpha point (plungers 0.19 V) / nominal F_z point
+   (plungers 0.35 V, spec §3.2):
+     alpha_LL = -0.26 eV/V  (target -0.11)   now ~2.3x OVER (was -0.11, spot on
+                                              but with the wrong well depth)
+     alpha_LR = -0.03 eV/V  (target -0.044)  still ~1.5x under
+     |F_z|    = 2.36 MV/m  (target 5.34)     ~2.3x under (was ~4-11x under)
+   Confirmed stable across grid resolution (coarse validate_electrostatics.py
+   grid vs. finer lever_at_dot.py grid agree to ~5%) -- this is a geometry
+   mismatch, not a discretization error.
+
+   The remaining gap can't be closed by further vertical-distance tuning
+   alone: alpha_LL overshooting means the gate looks too CLOSE, while F_z
+   undershooting means it looks too FAR -- moving the well/gate distance
+   either way pushes one metric further from target while helping the other.
+   The real device geometry must differ from the literal spec-table stack in
+   a way that decouples the two (e.g. actual finger lateral width/isolation
+   gap, or a via reaching partway into the screening slab) -- still needs
+   the real Fig.1(e) dimensions to resolve; not solvable by guessing further.
+   See `validate/lever_at_dot.py`.
 5. Interface charges (continuum + discrete) — done
 6. z-reduction + `DotPotential` hand-off — done (fixed-slice F_z + full 1D
    projection); `per_column=True` for higher fidelity, `per_column=False` for

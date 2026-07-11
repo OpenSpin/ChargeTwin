@@ -7,18 +7,18 @@ phi=0 boundary condition at z=0 stands in for that slab, no bulk metal layer
 needed below it (optional cfg.bottom_pad_nm can still pad the SiGe below,
 for far-BC convergence studies).
 
-Layer stack bottom -> top (z in nm, from z=0):
-  SiGe_lower    ( 0.0, 30.0)  eps=13.2
-  Si_well       (30.0, 40.0)  eps=12.0   <- quantum well
-  SiGe_upper    (40.0,100.0)  eps=13.2
+Layer stack bottom -> top (z in nm, from z=0), per spec §3.1 -- both SiGe
+layers sit BELOW the well, the well is directly under the Si cap:
+  SiGe_lower    ( 0.0, 30.0)  eps=13.2   <- substrate
+  SiGe_barrier  (30.0, 90.0)  eps=13.2   <- barrier, U0=150 meV above well
+  Si_well       (90.0,100.0)  eps=12.0   <- quantum well
   Si_cap        (100.0,101.5) eps=12.0   <- trapped-charge interface (top face)
   SiO2_lower    (101.5,111.5) eps=3.9
   screening_slab(111.5,121.5) metal outside channel (V=0) / SiO2 inside channel
-  top branch    (121.5,148.5) outside channel: SiO2 for the first 10 nm
-                               (121.5..131.5), SiO2 filler above; inside
-                               channel: three metallic gates (PL, barrier, PR)
-                               with 3 nm SiO2 isolation on both sides of the
-                               142 nm channel (136 nm gate span in y).
+  top branch    (121.5,148.5) outside channel: SiO2 filler; inside channel:
+                               three metallic gates (PL, barrier, PR) with
+                               3 nm SiO2 isolation on both sides of the 142 nm
+                               channel (136 nm gate span in y).
 
 Channel runs along x-axis, width d_channel=142 nm in y. Gates (PL, PR, barrier)
 are short bars spanning 136 nm of the channel in y (3 nm SiO2 isolation each
@@ -60,22 +60,20 @@ class GeometryConfig:
     Lx_nm: float = 660.0
     Ly_nm: float = 582.0
 
-    # z layer stack, bottom -> top (spec §3.1)
-    t_sige_lower_nm: float = 30.0    # SiGe, below the well
+    # z layer stack, bottom -> top (spec §3.1). Well sits directly under the
+    # Si cap -- both SiGe layers (substrate + barrier) are BELOW the well,
+    # there is no SiGe layer above it.
+    t_sige_lower_nm: float = 30.0    # SiGe substrate, below the barrier
+    t_sige_barrier_nm: float = 60.0  # SiGe barrier, directly below the well
     t_well_nm: float = 10.0          # Si quantum well
-    t_sige_upper_nm: float = 50.0    # SiGe, above the well
     t_cap_nm: float = 1.5            # Si cap; charge-trap interface is Si_cap/SiO2_lower
-    t_oxide_lower_nm: float = 5.0    # SiO2 below screening slab
-    t_screening_slab_nm: float = 5.0  # screening METAL slab (outside channel); SiO2 inside channel
-    t_oxide_upper_nm: float = 10.0   # outside-channel oxide thickness within the top branch (nm);
-                                      # documents where the outside-channel stack physically ends --
-                                      # the top branch is uniformly SiO2 filler either way, so this
-                                      # does not size the mesh (see build_z_stack docstring)
+    t_oxide_lower_nm: float = 10.0   # SiO2 below screening slab (spec §3.1)
+    t_screening_slab_nm: float = 10.0  # screening METAL slab (outside channel); SiO2 inside channel
     t_gate_metal_nm: float = 27.0    # top branch height: PL/PR/barrier fingers, inside channel only
 
     # Gate geometry (spec §3.2/3.3)
-    w_metal_nm: float = 40.0  # plunger/barrier finger width in x
-    plunger_pitch_nm: float = 90.0  # PL-PR center-to-center in x; barrier centered between
+    w_metal_nm: float = 45.0  # plunger/barrier finger width in x
+    plunger_pitch_nm: float = 95.0  # PL-PR center-to-center in x (clean-device d0=95nm, spec §3.4); barrier centered between
     d_channel_nm: float = 142.0  # channel width in y (gap in screening layer)
     t_gate_iso_nm: float = 3.0  # SiO2 isolation between gate fingers and channel edge (each side, in y)
 
@@ -112,8 +110,8 @@ def build_z_stack(cfg: GeometryConfig) -> List[LayerSpec]:
         layers.append(LayerSpec("bottom_pad", cfg.bottom_pad_nm, mat.EPS_R_SIGE, mat.U0_SIGE_BARRIER))
     layers += [
         LayerSpec("SiGe_lower", cfg.t_sige_lower_nm, mat.EPS_R_SIGE, mat.U0_SIGE_BARRIER),
+        LayerSpec("SiGe_barrier", cfg.t_sige_barrier_nm, mat.EPS_R_SIGE, mat.U0_SIGE_BARRIER),
         LayerSpec("Si_well", cfg.t_well_nm, mat.EPS_R_SI, 0.0),
-        LayerSpec("SiGe_upper", cfg.t_sige_upper_nm, mat.EPS_R_SIGE, mat.U0_SIGE_BARRIER),
         LayerSpec("Si_cap", cfg.t_cap_nm, mat.EPS_R_SI, 0.0),
         LayerSpec("SiO2_lower", cfg.t_oxide_lower_nm, mat.EPS_R_SIO2, 3.0),
         LayerSpec("screening_slab", cfg.t_screening_slab_nm, mat.EPS_R_SIO2, 3.0),
