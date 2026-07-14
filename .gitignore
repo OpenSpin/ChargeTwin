@@ -1,4 +1,12 @@
-.venv/
+# reference material from the pre-cleanup repositories, kept on disk only
+old_repo/
+
+# sampled ensembles are reproducible from the models
+data/generated/
+
 __pycache__/
-*.pyc
-output/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store
+.venv/
