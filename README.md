@@ -2,9 +2,11 @@
 
 **Generate realistic disorder realizations of a Si/SiGe double quantum dot — as many as you want, in a second.**
 
-Charge trapped at the semiconductor–oxide interface makes every quantum dot device different, and makes the *same* device different after every cooldown. ChargeTwin takes a finite-element ensemble of disordered devices, compresses it into a generative model, and hands you an unlimited stream of synthetic — but statistically faithful — devices.
+Charge trapped at the semiconductor–oxide interface makes every quantum dot device different, and makes the *same* device different after every cooldown. ChargeTwin takes a finite-element ensemble of disordered devices, compresses it into a generative model, and hands you an unlimited stream of synthetic, but statistically faithful, devices.
 
-Companion code for [*Statistical Structure of Charge Disorder in Si/SiGe Quantum Dots*](https://arxiv.org/abs/2510.13578) (Samadi, Cywiński, Krzywda). The simulated device is specified in [`docs/device.md`](docs/device.md).
+This is a proof of principle for one concrete device — specified in [`docs/device.md`](docs/device.md) — at the disorder strengths studied in [*Statistical Structure of Charge Disorder in Si/SiGe Quantum Dots*](https://arxiv.org/abs/2510.13578) (Samadi, Cywiński, Krzywda), whose results it reproduces.
+
+**In progress:** an interface for supplying your own device geometry, and a generative model that interpolates across disorder strengths rather than fitting each one separately.
 
 ```python
 import chargetwin as ct
@@ -45,21 +47,41 @@ Every thermal cycle re-traps the interface charge from scratch. So "another devi
 
 **A — Covariance (`GaussianModel`).** Multivariate normal with the empirical mean and full covariance matrix. Keeps every pairwise correlation; stores `p(p+1)/2` numbers. Reproduces the raw cloud to ~2% in covariance Frobenius norm.
 
-**B — Dominant PCA (`PCAModel`).** Standardize, keep the `k` leading principal components, sample independent Gaussians along them, map back. Stores `k·p` numbers, and each mode is a *named physical distortion*:
+**B — Dominant PCA (`PCAModel`).** Standardize, keep the `k` leading principal components, sample independent Gaussians along them, map back. Stores `k·p` numbers, and each mode is a *named physical distortion* of the device.
+
+![Raw COMSOL data versus both generative models, across every pair of parameters](docs/figures/corner_raw_vs_models.png)
+
+Blue is the real COMSOL ensemble, red is method A, yellow method B. Method A tracks the raw cloud everywhere. Method B reproduces the dominant correlations but collapses the residual scatter — the yellow points thin onto a line in exactly those panels whose spread lived in the discarded modes.
+
+### The three disorder modes
+
+![Scree plot and mode loadings](docs/figures/disorder_modes.png)
 
 | mode | variance (ρ = 5×10¹⁰ cm⁻²) | what it is |
 |---|---|---|
-| PC1 | 43% | **symmetric squeeze/stretch** — `d` ↑, `t_c` ↓, `⟨L_x⟩` ↓ together |
-| PC2 | 33% | **asymmetric tilt** — `ε`, `ΔF_z`, `ΔL_x` together |
-| PC3 | 12% | **common vertical shift** — dominated by `⟨F_z⟩` |
+| PC1 | 43% | **symmetric squeeze/stretch** — charge *between* the dots pushes them apart (`d` ↑), collapsing the tunnel coupling (`t_c` ↓) and shrinking the confinement (`⟨L_x⟩` ↓) |
+| PC2 | 33% | **asymmetric tilt** — charge nearer one dot tilts the double well (`ε`, `ΔF_z`, `ΔL_x` together) |
+| PC3 | 12% | **common vertical shift** — almost pure `⟨F_z⟩`; matters for valley splitting |
 
-Three modes carry **88%** of all device-to-device variance. The cost of truncation is visible in the corner plot: method B collapses the residual scatter onto a 3D subspace.
+Three modes carry **88%** of all device-to-device variance. This is the result the paper's control analysis rests on: PC1 cannot be undone with the plunger gates alone — correcting it needs the barrier gate.
 
 Both models share one interface — `.fit()`, `.sample(n, seed)`, `.save()`, `.load()` — so switching method is a one-line change anywhere downstream.
 
 ### The tunnel coupling is modelled in log space
 
-`t_c` depends exponentially on the inter-dot distance (WKB), so its distribution has a long tail. `PAPER_PARAMETERS` therefore carries `log2tc = log₁₀(2t_c)` rather than `t_c`: a Gaussian fitted to *linear* `t_c` reproduces the marginal badly and generates unphysical **negative** tunnel couplings. Call `ct.add_tunnel_coupling(df)` to get `t_c` in µeV back.
+`t_c` depends exponentially on the inter-dot distance (WKB), so its distribution has a long tail. `PAPER_PARAMETERS` therefore carries `log2tc = log₁₀(2t_c)` rather than `t_c`. This is not cosmetic: a Gaussian fitted to *linear* `t_c` reproduces the marginal badly **and** generates devices with a negative tunnel coupling.
+
+![Fitting a Gaussian to linear t_c produces negative tunnel couplings; fitting in log space does not](docs/figures/log_tunnel_coupling.png)
+
+Call `ct.add_tunnel_coupling(df)` to get `t_c` in µeV back.
+
+## What it's for: yield under repeated cooldowns
+
+Put an operating window on the parameters you care about and count what fraction of cooldowns land inside it. The model turns "how bad is charge disorder?" into a number you can compute for any spec, at any density, without running COMSOL again.
+
+![Yield versus spec width, and versus interface charge density](docs/figures/yield.png)
+
+The window here is the paper's tunability criterion (Sec. III A): tunnel gap `2t_c` within 10–250 µeV, and under 20 mV of plunger correction needed to re-symmetrize the dot (`|ε| < 1.2 meV` through the lever arm). Sampling the fitted model reproduces the paper's tunability success rates — **74% and 18%**, against 76% and 20% measured on the full simulations — from a few kB of stored numbers.
 
 ## Data
 
@@ -72,10 +94,11 @@ Both models share one interface — `.fit()`, `.sample(n, seed)`, `.save()`, `.l
 
 Both are *post-tuning*: the plunger gates have been adjusted to symmetrize each disordered double well, so we study variability around a consistent operating point. `load_dataset` converts to physical units and derives the dot-level parameters; `ct.PARAMETERS` lists all 12 available. The loader reproduces Table I of the paper exactly, and a test pins it there.
 
-`data/models/` — precomputed fits (`.npz`, a few kB each), so a notebook can generate devices without touching the raw data. Regenerate with:
+`data/models/` — precomputed fits (`.npz`, a few kB each), so a notebook can generate devices without touching the raw data. Regenerate the fits and the figures above with:
 
 ```bash
 python scripts/fit_models.py
+python scripts/make_figures.py
 ```
 
 ## Layout
@@ -86,7 +109,7 @@ data/raw/            COMSOL ensembles (.pkl)
 data/models/         precomputed fits (.npz)
 docs/device.md       the simulated device: geometry, gates, disorder, extraction
 notebooks/           01 raw data -> 02 models -> 03 cooling rounds
-scripts/fit_models.py
+scripts/             fit_models.py, make_figures.py
 tests/
 ```
 
