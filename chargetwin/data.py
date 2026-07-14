@@ -33,17 +33,17 @@ class Dataset:
 
 
 DATASETS: dict[str, Dataset] = {
-    "rho1e10": Dataset(
-        name="rho1e10",
-        path=RAW_ROOT / "DQD_rho1e10_after_tuning.pkl",
-        density=r"1e10 cm^-2",
-        description="449 disorder realizations, after virtual-gate tuning.",
-    ),
     "rho5e9": Dataset(
         name="rho5e9",
-        path=RAW_ROOT / "DQD_rho5e9_after_tuning.pkl",
+        path=RAW_ROOT / "DQD_rho5e9_after_tuning_adj.pkl",
         density=r"5e9 cm^-2",
-        description="500 disorder realizations, after virtual-gate tuning.",
+        description="500 disorder realizations, low density, after tuning to the symmetric point.",
+    ),
+    "rho5e10": Dataset(
+        name="rho5e10",
+        path=RAW_ROOT / "DQD_rho5e10_after_tuning_adj.pkl",
+        density=r"5e10 cm^-2",
+        description="500 disorder realizations, high density, after tuning to the symmetric point.",
     ),
 }
 
@@ -53,7 +53,13 @@ DATASETS: dict[str, Dataset] = {
 # spelling of `unit`, for axis labels.
 PARAMETERS: dict[str, dict[str, str]] = {
     "d": dict(unit="nm", unit_tex="nm", latex=r"$d$", desc="Inter-dot distance"),
-    "tcs": dict(unit="ueV", unit_tex=r"$\mu$eV", latex=r"$t_\mathrm{c}$", desc="Tunnel coupling"),
+    "tc": dict(unit="ueV", unit_tex=r"$\mu$eV", latex=r"$t_\mathrm{c}$", desc="Tunnel coupling"),
+    "log2tc": dict(
+        unit="log10(ueV)",
+        unit_tex=r"$\log_{10}\,\mu$eV",
+        latex=r"$\log_{10}(2t_\mathrm{c})$",
+        desc="Log tunnel gap -- the Gaussian-friendly form of tc (see below)",
+    ),
     "Lxavg": dict(unit="nm", unit_tex="nm", latex=r"$\langle L_x \rangle$", desc="Mean dot size along x"),
     "dLx": dict(unit="nm", unit_tex="nm", latex=r"$\Delta L_x$", desc="Dot-size asymmetry along x"),
     "Lyavg": dict(unit="nm", unit_tex="nm", latex=r"$\langle L_y \rangle$", desc="Mean dot size along y"),
@@ -66,8 +72,12 @@ PARAMETERS: dict[str, dict[str, str]] = {
     "V_acs": dict(unit="a.u.", unit_tex="a.u.", latex=r"$V_\mathrm{ac}$", desc="AC drive lever arm"),
 }
 
-# The subset used for Fig. 5 of arXiv:2510.13578.
-FIG5_PARAMETERS = ["d", "tcs", "Lxavg", "dLx", "Favg", "dF", "eps"]
+# The parameter vector the paper fits its statistical model on (arXiv:2510.13578,
+# Sec. IV): the tunnel coupling enters as log10(2*tc), because tc depends
+# exponentially on d and h_B (WKB) and is therefore strongly non-Gaussian. Fit a
+# Gaussian to raw tc and you get a bad marginal *and* unphysical negative
+# samples; in log space the marginal is close to normal.
+PAPER_PARAMETERS = ["d", "log2tc", "Lxavg", "dLx", "Favg", "dF", "eps"]
 
 
 def natural_length(a_x, a_y, m_eff: float = M_EFF_SI) -> tuple[np.ndarray, np.ndarray]:
@@ -101,10 +111,15 @@ def load_dataset(name: str, parameters: list[str] | None = None) -> pd.DataFrame
     LyL, LyR = natural_length(d["ayLs"], d["ayRs"])
     FzL, FzR = d["FzLs"] * 1e-6, d["FzRs"] * 1e-6  # V/m -> MV/m
 
+    # The raw `tcs` field holds the tunnelling *gap* 2*t_c in ueV (this is the
+    # quantity tabulated in the paper), so the coupling itself is half of it.
+    gap = d["tcs"]
+
     out = pd.DataFrame(
         {
             "d": d["d"],
-            "tcs": d["tcs"],
+            "tc": gap / 2,
+            "log2tc": np.log10(gap),
             "Lxavg": (LxL + LxR) / 2,
             "dLx": LxL - LxR,
             "Lyavg": (LyL + LyR) / 2,
@@ -113,7 +128,7 @@ def load_dataset(name: str, parameters: list[str] | None = None) -> pd.DataFrame
             "dF": FzL - FzR,
             "eps": d["eps"] * 1e3,  # eV -> meV
             "Eavgs": d["Eavgs"] * 1e-6,
-            "Bhs": d["Bhs"],
+            "Bhs": d["Bhs"] * 1e3,  # eV -> meV
             "V_acs": d["V_acs"],
         }
     )
@@ -122,6 +137,19 @@ def load_dataset(name: str, parameters: list[str] | None = None) -> pd.DataFrame
         if missing:
             raise KeyError(f"{name} cannot provide {missing}; available: {list(out.columns)}")
         out = out[parameters]
+    return out
+
+
+def add_tunnel_coupling(df: pd.DataFrame) -> pd.DataFrame:
+    """Undo the log transform: add a ``tc`` column (ueV) next to ``log2tc``.
+
+    Use this on generated samples before applying a spec that is written in
+    terms of the tunnel coupling itself.
+    """
+    if "log2tc" not in df.columns:
+        raise KeyError("frame has no 'log2tc' column")
+    out = df.copy()
+    out["tc"] = 10 ** out["log2tc"] / 2
     return out
 
 

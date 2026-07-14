@@ -7,13 +7,50 @@ from chargetwin.models import DisorderModel
 
 @pytest.fixture(scope="module")
 def raw():
-    return ct.load_dataset("rho1e10", ct.FIG5_PARAMETERS)
+    return ct.load_dataset("rho5e10", ct.PAPER_PARAMETERS)
 
 
 def test_datasets_load(raw):
-    assert len(raw) == 449
-    assert list(raw.columns) == ct.FIG5_PARAMETERS
+    assert len(raw) == 500
+    assert list(raw.columns) == ct.PAPER_PARAMETERS
     assert raw.notna().all().all()
+
+
+# Table I of arXiv:2510.13578: mean and std of each parameter. Pinning these
+# catches unit slips in the loader -- `tcs` in the raw file is the tunnelling
+# *gap* 2*t_c, and `Bhs` is in eV, both of which are easy to get wrong.
+TABLE_I = {
+    "rho5e9": {
+        "d": (94.60, 3.10),
+        "Bhs": (1.691, 0.203),
+        "eps": (-0.072, 0.987),
+        "Favg": (5.337, 0.006),
+        "dLx": (0.009, 0.139),
+        "Lxavg": (20.37, 0.235),
+    },
+    "rho5e10": {
+        "d": (92.75, 11.23),
+        "Bhs": (1.678, 0.692),
+        "eps": (0.036, 3.683),
+        "Favg": (5.267, 0.022),
+        "dLx": (0.049, 0.761),
+        "Lxavg": (20.709, 0.837),
+    },
+}
+GAP_2TC = {"rho5e9": (23.13, 9.13), "rho5e10": (50.30, 57.91)}
+
+
+@pytest.mark.parametrize("dataset", ["rho5e9", "rho5e10"])
+def test_loader_reproduces_paper_table(dataset):
+    df = ct.load_dataset(dataset)
+    for p, (mean, std) in TABLE_I[dataset].items():
+        assert df[p].mean() == pytest.approx(mean, abs=5e-3)
+        assert df[p].std() == pytest.approx(std, abs=5e-3)
+
+    mean, std = GAP_2TC[dataset]
+    assert (2 * df["tc"]).mean() == pytest.approx(mean, abs=0.01)
+    assert (2 * df["tc"]).std() == pytest.approx(std, abs=0.01)
+    assert np.allclose(df["log2tc"], np.log10(2 * df["tc"]))
 
 
 def test_gaussian_recovers_moments(raw):
@@ -65,13 +102,16 @@ def test_save_load_roundtrip(raw, tmp_path, kind):
     assert loaded.sample(100, seed=3).equals(model.sample(100, seed=3))
 
 
-def test_cooldowns_are_tagged(raw):
-    model = ct.GaussianModel.fit(raw)
-    rounds = model.cooldowns(10, seed=0)
-    assert list(rounds["round"]) == list(range(10))
-    assert list(rounds.columns) == ["round", *ct.FIG5_PARAMETERS]
+def test_log_transform_keeps_tunnel_coupling_positive(raw):
+    # Fitting a Gaussian to raw tc would put ~4% of the samples at tc < 0.
+    s = ct.add_tunnel_coupling(ct.GaussianModel.fit(raw).sample(50_000, seed=0))
+    assert (s["tc"] > 0).all()
+
+    raw_lin = ct.load_dataset("rho5e10", ["d", "tc"])
+    lin = ct.GaussianModel.fit(raw_lin).sample(50_000, seed=0)
+    assert (lin["tc"] < 0).mean() > 0.01  # the bug the log transform avoids
 
 
 def test_unknown_parameter_is_rejected():
     with pytest.raises(KeyError):
-        ct.load_dataset("rho1e10", ["d", "not_a_parameter"])
+        ct.load_dataset("rho5e10", ["d", "not_a_parameter"])

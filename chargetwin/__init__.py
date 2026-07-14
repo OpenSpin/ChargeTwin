@@ -1,24 +1,28 @@
 """ChargeTwin -- generate realistic disorder realizations of a Si/SiGe double quantum dot.
 
 Fit a generative model to a COMSOL disorder ensemble, then draw as many
-synthetic devices (or cooldowns of one device) as you like::
+realizations as you like::
 
-    from chargetwin import load_dataset, GaussianModel, PCAModel, FIG5_PARAMETERS
+    from chargetwin import load_dataset, GaussianModel, PCAModel, PAPER_PARAMETERS
 
-    raw = load_dataset("rho1e10", FIG5_PARAMETERS)
-    gauss = GaussianModel.fit(raw)          # method A: full covariance
-    pca = PCAModel.fit(raw, n_components=3)  # method B: 3 dominant modes
+    raw = load_dataset("rho5e10", PAPER_PARAMETERS)
+    gauss = GaussianModel.fit(raw)           # method A: full covariance
+    pca = PCAModel.fit(raw, n_components=3)  # method B: 3 dominant disorder modes
 
     devices = gauss.sample(1000, seed=0)
-    rounds = pca.cooldowns(50, seed=0)
 
-Companion code for arXiv:2510.13578.
+One draw = one fresh placement of the trapped interface charge. That is equally
+"another device from the same wafer" and "the same device after another
+cooldown" -- both re-randomize the charge from scratch.
+
+Companion code for arXiv:2510.13578. See docs/device.md for the simulated device.
 """
 
 from .data import (
     DATASETS,
-    FIG5_PARAMETERS,
     PARAMETERS,
+    PAPER_PARAMETERS,
+    add_tunnel_coupling,
     available_parameters,
     labels,
     load_dataset,
@@ -33,11 +37,12 @@ __version__ = "0.1.0"
 
 __all__ = [
     "DATASETS",
-    "FIG5_PARAMETERS",
+    "PAPER_PARAMETERS",
     "PARAMETERS",
     "DisorderModel",
     "GaussianModel",
     "PCAModel",
+    "add_tunnel_coupling",
     "available_parameters",
     "covariance_error",
     "labels",

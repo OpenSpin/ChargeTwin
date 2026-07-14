@@ -31,18 +31,14 @@ class DisorderModel:
     parameters: list[str]
 
     def sample(self, n_samples: int, seed: int | None = None) -> pd.DataFrame:
-        raise NotImplementedError
+        """Draw ``n_samples`` disorder realizations.
 
-    def cooldowns(self, n_rounds: int, seed: int | None = None) -> pd.DataFrame:
-        """``n_rounds`` independent cooldowns of the same device.
-
-        Every thermal cycle re-traps the interface charge from scratch, so a
-        cooldown is an i.i.d. draw from the disorder distribution. The returned
-        frame carries a ``round`` column.
+        A realization is a fresh placement of the trapped interface charge, so
+        one draw is equally "another device from the same wafer" and "the same
+        device after another cooldown" -- both re-randomize the charge from
+        scratch, and the model does not distinguish them.
         """
-        out = self.sample(n_rounds, seed=seed)
-        out.insert(0, "round", np.arange(n_rounds))
-        return out
+        raise NotImplementedError
 
     def save(self, path: str | Path) -> Path:
         path = Path(path)
